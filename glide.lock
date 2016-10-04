@@ -1,0 +1,6 @@
+hash: 5c44a97e582724b3fcbec1189a79616d2d34a933514b64a732b138ffaa7773b4
+updated: 2016-10-04T21:49:39.210110704+08:00
+imports:
+- name: github.com/axgle/mahonia
+  version: c528b747d92d41ca581a7acf3e604c396fc7c034
+devImports: []
