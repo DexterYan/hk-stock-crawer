@@ -40,7 +40,12 @@ type Stock struct {
 	IssuedShare string  `json:"issuedShare"`
 }
 
-func getStockCurrentSummary(code string, time int64) string {
+type StockMonth struct {
+	Code  string        `json:"StockNo"`
+	Trade []interface{} `json:"Trade"`
+}
+
+func getStockCurrentSummary(code string, time int64) interface{} {
 	url := "http://money18.on.cc/js/daily/hk/quote/" + code + "_d.js?t=" + strconv.FormatInt(time, 10)
 	fmt.Print(url)
 	resp, err := http.Get(url)
@@ -54,10 +59,26 @@ func getStockCurrentSummary(code string, time int64) string {
 	stock := Stock{}
 	err = json.Unmarshal([]byte(decodeBody), &stock)
 	checkError(err)
-	return stock.NameCh
+	return stock
+}
+
+func getStockMonthSummary(code string) interface{} {
+	url := "http://money18.on.cc/js/daily/short_put/short_put_" + code + ".js"
+	resp, err := http.Get(url)
+	checkError(err)
+	body, _ := ioutil.ReadAll(resp.Body)
+	reg, err := regexp.Compile(".*=")
+	checkError(err)
+	reg1, err := regexp.Compile(";")
+	decodeBody := reg.ReplaceAllString(string(body), "")
+	decodeBody = reg1.ReplaceAllString(decodeBody, "")
+	stockMonth := StockMonth{}
+	err = json.Unmarshal([]byte(decodeBody), &stockMonth)
+	checkError(err)
+	return stockMonth
 }
 
 func main() {
 	fmt.Print(getStockCurrentSummary("00700", time.Now().Unix()))
-
+	fmt.Print(getStockMonthSummary("00700"))
 }
