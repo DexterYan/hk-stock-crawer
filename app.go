@@ -3,11 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/axgle/mahonia"
@@ -46,6 +48,7 @@ type StockMonth struct {
 }
 
 func getStockCurrentSummary(code string, time int64) interface{} {
+	var stock Stock
 	url := "http://money18.on.cc/js/daily/hk/quote/" + code + "_d.js?t=" + strconv.FormatInt(time, 10)
 	fmt.Print(url)
 	resp, err := http.Get(url)
@@ -53,32 +56,56 @@ func getStockCurrentSummary(code string, time int64) interface{} {
 	body, _ := ioutil.ReadAll(resp.Body)
 	decode := mahonia.NewDecoder("big5")
 	decodeBody := decode.ConvertString(string(body))
-	reg, err := regexp.Compile(".*=")
-	checkError(err)
+	reg := regexp.MustCompile(".*=")
 	decodeBody = reg.ReplaceAllString(decodeBody, "")
-	stock := Stock{}
-	err = json.Unmarshal([]byte(decodeBody), &stock)
-	checkError(err)
+	dec := json.NewDecoder(strings.NewReader(decodeBody))
+	for {
+		var s Stock
+		if err := dec.Decode(&s); err == io.EOF {
+			break
+		} else {
+			checkError(err)
+		}
+		stock = s
+	}
 	return stock
 }
 
 func getStockMonthSummary(code string) interface{} {
+	var stockMonth StockMonth
 	url := "http://money18.on.cc/js/daily/short_put/short_put_" + code + ".js"
 	resp, err := http.Get(url)
 	checkError(err)
 	body, _ := ioutil.ReadAll(resp.Body)
-	reg, err := regexp.Compile(".*=")
-	checkError(err)
-	reg1, err := regexp.Compile(";")
+	reg := regexp.MustCompile(".*=")
+	reg1 := regexp.MustCompile(";")
 	decodeBody := reg.ReplaceAllString(string(body), "")
 	decodeBody = reg1.ReplaceAllString(decodeBody, "")
-	stockMonth := StockMonth{}
-	err = json.Unmarshal([]byte(decodeBody), &stockMonth)
-	checkError(err)
+	dec := json.NewDecoder(strings.NewReader(decodeBody))
+	for {
+		var s StockMonth
+		if err := dec.Decode(&s); err == io.EOF {
+			break
+		} else {
+			checkError(err)
+		}
+		stockMonth = s
+	}
 	return stockMonth
+}
+
+func getStockList() []string {
+	url := "http://money18.on.cc/js/daily/hk/stocklist/stockList_secCode.js"
+	resp, err := http.Get(url)
+	checkError(err)
+	body, _ := ioutil.ReadAll(resp.Body)
+	reg := regexp.MustCompile("[0-9]{5}")
+	stockList := reg.FindAllString(string(body), -1)
+	return stockList
 }
 
 func main() {
 	fmt.Print(getStockCurrentSummary("00700", time.Now().Unix()))
 	fmt.Print(getStockMonthSummary("00700"))
+	//fmt.Print(getStockList())
 }
