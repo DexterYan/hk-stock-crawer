@@ -12,34 +12,50 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
+
 	"github.com/axgle/mahonia"
 )
 
 func checkError(err error) {
 	if err != nil {
-		log.Fatal(err)
+		if err.Error() != "not found" {
+			log.Fatal(err)
+		}
 	}
 }
 
+func startOfDay(date time.Time) time.Time {
+	year, month, day := date.Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, date.Location())
+}
+
+func endOfDay(date time.Time) time.Time {
+	year, month, day := date.Date()
+	return time.Date(year, month, day, 23, 59, 0, 0, date.Location())
+}
+
 type Stock struct {
-	NameEn      string  `json:"name"`
-	NameCh      string  `json:"nameChi"`
-	LastClose   string  `json:"preCPrice"`
-	LotSize     string  `json:"lotSize"`
-	MthHigh     string  `json:"mthHigh"`
-	MthLow      string  `json:"mthLow"`
-	Wk52High    string  `json:"wk52High"`
-	Wk52Low     string  `json:"wk52Low"`
-	Ma10        float32 `json:"ma10"`
-	Ma20        float32 `json:"ma20"`
-	Ma50        float32 `json:"ma50"`
-	Rsi10       float32 `json:"rsi10"`
-	Rsi14       float32 `json:"rsi14"`
-	Rsi20       float32 `json:"rsi20"`
-	Dividend    string  `json:"dividend"`
-	Eps         string  `json:"eps"`
-	ParentType  string  `json:"parentType"`
-	IssuedShare string  `json:"issuedShare"`
+	Code       string
+	NameEn     string    `json:"name"`
+	NameCh     string    `json:"nameChi"`
+	LastClose  float32   `json:"preCPrice,string"`
+	LotSize    float32   `json:"lotSize,string"`
+	MthHigh    float32   `json:"mthHigh,string"`
+	MthLow     float32   `json:"mthLow,string"`
+	Wk52High   float32   `json:"wk52High,string"`
+	Wk52Low    float32   `json:"wk52Low,string"`
+	Ma10       float32   `json:"ma10"`
+	Ma20       float32   `json:"ma20"`
+	Ma50       float32   `json:"ma50"`
+	Rsi10      float32   `json:"rsi10"`
+	Rsi14      float32   `json:"rsi14"`
+	Rsi20      float32   `json:"rsi20"`
+	Dividend   float32   `json:"dividend,string"`
+	Eps        float32   `json:"eps,string"`
+	ParentType string    `json:"parentType"`
+	Timestamp  time.Time `bson:"timestamp"`
 }
 
 type StockMonth struct {
@@ -47,9 +63,9 @@ type StockMonth struct {
 	Trade []interface{} `json:"Trade"`
 }
 
-func getStockCurrentSummary(code string, time int64) interface{} {
+func getStockCurrentSummary(code string, date int64) interface{} {
 	var stock Stock
-	url := "http://money18.on.cc/js/daily/hk/quote/" + code + "_d.js?t=" + strconv.FormatInt(time, 10)
+	url := "http://money18.on.cc/js/daily/hk/quote/" + code + "_d.js?t=" + strconv.FormatInt(date, 10)
 	fmt.Print(url)
 	resp, err := http.Get(url)
 	checkError(err)
@@ -66,6 +82,8 @@ func getStockCurrentSummary(code string, time int64) interface{} {
 		} else {
 			checkError(err)
 		}
+		s.Code = code
+		s.Timestamp = time.Now()
 		stock = s
 	}
 	return stock
@@ -104,8 +122,33 @@ func getStockList() []string {
 	return stockList
 }
 
+func saveStockToDB(stock interface{}) {
+	result := Stock{}
+	session, err := mgo.Dial("localhost:27017")
+	checkError(err)
+	defer session.Close()
+	c := session.DB("test").C("stock")
+	date := time.Now()
+	year, month, day := date.Date()
+	sd := time.Date(year, month, day, 0, 0, 0, 0, date.Location())
+	ed := time.Date(year, month, day, 23, 59, 0, 0, date.Location())
+	fmt.Print(sd)
+	fmt.Print(ed)
+	query := bson.M{"code": "00700", "timestamp": bson.M{
+		"$gte": time.Date(year, month, day, 0, 0, 0, 0, date.Location()),
+		"$lt":  time.Date(year, month, day+1, 0, 0, 0, 0, date.Location()),
+	}}
+	err = c.Find(query).One(&result)
+	if (Stock{} == result) {
+		c.Insert(stock)
+	} else {
+		fmt.Print(result)
+	}
+	checkError(err)
+}
+
 func main() {
-	fmt.Print(getStockCurrentSummary("00700", time.Now().Unix()))
-	fmt.Print(getStockMonthSummary("00700"))
+	saveStockToDB(getStockCurrentSummary("00700", time.Now().Unix()))
+	// fmt.Print(getStockMonthSummary("00700"))
 	//fmt.Print(getStockList())
 }
