@@ -64,6 +64,17 @@ type StockMonth struct {
 	Trade []interface{} `json:"Trade"`
 }
 
+type StockPrice struct {
+	Code      string
+	Time      string  `json:"ltt"`
+	NowPrice  float32 `json:"np"`
+	LastPrice float32 `json:"ltp"`
+	Vollum    float32 `json:"vol"`
+	Turnover  float32 `json:"tvr"`
+	DayHigh   float32 `json:"dyh"`
+	DayLow    float32 `json:"dyl"`
+}
+
 func getStockCurrentSummary(code string, date int64) Stock {
 	var stock Stock
 	url := "http://money18.on.cc/js/daily/hk/quote/" + code + "_d.js?t=" + strconv.FormatInt(date, 10)
@@ -110,6 +121,27 @@ func getStockMonthSummary(code string) interface{} {
 		stockMonth = s
 	}
 	return stockMonth
+}
+
+func getStockPrice(code string, date int64) StockPrice {
+	var stockPrice StockPrice
+	url := "http://money18.on.cc/js/real/hk/quote/" + code + "_r.js?t=" + strconv.FormatInt(date, 10)
+	resp, err := http.Get(url)
+	checkError(err)
+	body, _ := ioutil.ReadAll(resp.Body)
+	reg := regexp.MustCompile(".*=")
+	decodeBody := reg.ReplaceAllString(string(body), "")
+	dec := json.NewDecoder(strings.NewReader(decodeBody))
+	for {
+		var s StockPrice
+		if err := dec.Decode(&s); err == io.EOF {
+			break
+		} else {
+			checkError(err)
+		}
+		stockPrice = s
+	}
+	return stockPrice
 }
 
 func getStockList() []string {
