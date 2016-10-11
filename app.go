@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/mgo.v2"
@@ -63,10 +64,9 @@ type StockMonth struct {
 	Trade []interface{} `json:"Trade"`
 }
 
-func getStockCurrentSummary(code string, date int64) interface{} {
+func getStockCurrentSummary(code string, date int64) Stock {
 	var stock Stock
 	url := "http://money18.on.cc/js/daily/hk/quote/" + code + "_d.js?t=" + strconv.FormatInt(date, 10)
-	fmt.Print(url)
 	resp, err := http.Get(url)
 	checkError(err)
 	body, _ := ioutil.ReadAll(resp.Body)
@@ -122,7 +122,19 @@ func getStockList() []string {
 	return stockList
 }
 
-func saveStockToDB(stock interface{}) {
+func readStockList(stockList []string) <-chan string {
+	out := make(chan string)
+	go func() {
+		for _, n := range stockList {
+			out <- n
+		}
+		close(out)
+	}()
+	return out
+}
+
+func saveStockToDB(stock Stock) {
+	fmt.Println(stock.Code)
 	result := Stock{}
 	session, err := mgo.Dial("localhost:27017")
 	checkError(err)
@@ -130,11 +142,7 @@ func saveStockToDB(stock interface{}) {
 	c := session.DB("test").C("stock")
 	date := time.Now()
 	year, month, day := date.Date()
-	sd := time.Date(year, month, day, 0, 0, 0, 0, date.Location())
-	ed := time.Date(year, month, day, 23, 59, 0, 0, date.Location())
-	fmt.Print(sd)
-	fmt.Print(ed)
-	query := bson.M{"code": "00700", "timestamp": bson.M{
+	query := bson.M{"code": stock.Code, "timestamp": bson.M{
 		"$gte": time.Date(year, month, day, 0, 0, 0, 0, date.Location()),
 		"$lt":  time.Date(year, month, day+1, 0, 0, 0, 0, date.Location()),
 	}}
@@ -142,13 +150,24 @@ func saveStockToDB(stock interface{}) {
 	if (Stock{} == result) {
 		c.Insert(stock)
 	} else {
-		fmt.Print(result)
+		// fmt.Print(result)
 	}
 	checkError(err)
 }
 
 func main() {
-	saveStockToDB(getStockCurrentSummary("00700", time.Now().Unix()))
+	var wg sync.WaitGroup
+	stock := readStockList(getStockList())
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			for s := range stock {
+				saveStockToDB(getStockCurrentSummary(s, time.Now().Unix()))
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 	// fmt.Print(getStockMonthSummary("00700"))
 	//fmt.Print(getStockList())
 }
