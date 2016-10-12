@@ -67,12 +67,12 @@ type StockMonth struct {
 type StockPrice struct {
 	Code      string
 	Time      string  `json:"ltt"`
-	NowPrice  float32 `json:"np"`
-	LastPrice float32 `json:"ltp"`
-	Vollum    float32 `json:"vol"`
-	Turnover  float32 `json:"tvr"`
-	DayHigh   float32 `json:"dyh"`
-	DayLow    float32 `json:"dyl"`
+	NowPrice  float32 `json:"np,string"`
+	LastPrice float32 `json:"ltp,string"`
+	Vollum    int     `json:"vol,string"`
+	Turnover  int     `json:"tvr,string"`
+	DayHigh   float32 `json:"dyh,string"`
+	DayLow    float32 `json:"dyl,string"`
 }
 
 func getStockCurrentSummary(code string, date int64) Stock {
@@ -106,20 +106,24 @@ func getStockMonthSummary(code string) interface{} {
 	resp, err := http.Get(url)
 	checkError(err)
 	body, _ := ioutil.ReadAll(resp.Body)
-	reg := regexp.MustCompile(".*=")
-	reg1 := regexp.MustCompile(";")
-	decodeBody := reg.ReplaceAllString(string(body), "")
-	decodeBody = reg1.ReplaceAllString(decodeBody, "")
-	dec := json.NewDecoder(strings.NewReader(decodeBody))
-	for {
-		var s StockMonth
-		if err := dec.Decode(&s); err == io.EOF {
-			break
-		} else {
-			checkError(err)
+	matched, err := regexp.MatchString(string(body), "<")
+	if !matched {
+		reg := regexp.MustCompile(".*=")
+		reg1 := regexp.MustCompile(";")
+		decodeBody := reg.ReplaceAllString(string(body), "")
+		decodeBody = reg1.ReplaceAllString(decodeBody, "")
+		dec := json.NewDecoder(strings.NewReader(decodeBody))
+		for {
+			var s StockMonth
+			if err := dec.Decode(&s); err == io.EOF {
+				break
+			} else {
+				checkError(err)
+			}
+			stockMonth = s
 		}
-		stockMonth = s
 	}
+
 	return stockMonth
 }
 
@@ -131,6 +135,10 @@ func getStockPrice(code string, date int64) StockPrice {
 	body, _ := ioutil.ReadAll(resp.Body)
 	reg := regexp.MustCompile(".*=")
 	decodeBody := reg.ReplaceAllString(string(body), "")
+	reg1 := regexp.MustCompile(";")
+	decodeBody = reg1.ReplaceAllString(decodeBody, "")
+	reg2 := regexp.MustCompile("'")
+	decodeBody = reg2.ReplaceAllString(decodeBody, "\"")
 	dec := json.NewDecoder(strings.NewReader(decodeBody))
 	for {
 		var s StockPrice
@@ -181,13 +189,12 @@ func saveStockToDB(stock Stock) {
 	err = c.Find(query).One(&result)
 	if (Stock{} == result) {
 		c.Insert(stock)
-	} else {
-		// fmt.Print(result)
 	}
 	checkError(err)
 }
 
 func main() {
+	fmt.Println(getStockPrice("00700", time.Now().Unix()))
 	var wg sync.WaitGroup
 	stock := readStockList(getStockList())
 	for i := 0; i < 5; i++ {
