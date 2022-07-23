@@ -8,8 +8,8 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
+
 	"sync"
 	"time"
 
@@ -38,6 +38,10 @@ func endOfDay(date time.Time) time.Time {
 }
 
 type Stock struct {
+	StockDaily `json:"daily"`
+}
+
+type StockDaily struct {
 	Code       string
 	NameEn     string    `json:"name"`
 	NameCh     string    `json:"nameChi"`
@@ -59,29 +63,13 @@ type Stock struct {
 	Timestamp  time.Time `bson:"timestamp"`
 }
 
-type StockMonth struct {
-	Code  string        `json:"StockNo"`
-	Trade []interface{} `json:"Trade"`
-}
-
-type StockPrice struct {
-	Code      string
-	Time      string  `json:"ltt"`
-	NowPrice  float32 `json:"np,string"`
-	LastPrice float32 `json:"ltp,string"`
-	Vollum    int     `json:"vol,string"`
-	Turnover  int     `json:"tvr,string"`
-	DayHigh   float32 `json:"dyh,string"`
-	DayLow    float32 `json:"dyl,string"`
-}
-
-func getStockCurrentSummary(code string, date int64) Stock {
+func getStockCurrentSummary(code string) Stock {
 	var stock Stock
-	url := "http://money18.on.cc/js/daily/hk/quote/" + code + "_d.js?t=" + strconv.FormatInt(date, 10)
+	url := "https://realtime-money18-cdn.on.cc/securityQuote/genStockDetailHKJSON.php?stockcode=" + code
 	resp, err := http.Get(url)
 	checkError(err)
 	body, _ := ioutil.ReadAll(resp.Body)
-	decode := mahonia.NewDecoder("big5")
+	decode := mahonia.NewDecoder("utf8")
 	decodeBody := decode.ConvertString(string(body))
 	reg := regexp.MustCompile(".*=")
 	decodeBody = reg.ReplaceAllString(decodeBody, "")
@@ -100,58 +88,6 @@ func getStockCurrentSummary(code string, date int64) Stock {
 	return stock
 }
 
-func getStockMonthSummary(code string) interface{} {
-	var stockMonth StockMonth
-	url := "http://money18.on.cc/js/daily/short_put/short_put_" + code + ".js"
-	resp, err := http.Get(url)
-	checkError(err)
-	body, _ := ioutil.ReadAll(resp.Body)
-	matched, err := regexp.MatchString(string(body), "<")
-	if !matched {
-		reg := regexp.MustCompile(".*=")
-		reg1 := regexp.MustCompile(";")
-		decodeBody := reg.ReplaceAllString(string(body), "")
-		decodeBody = reg1.ReplaceAllString(decodeBody, "")
-		dec := json.NewDecoder(strings.NewReader(decodeBody))
-		for {
-			var s StockMonth
-			if err := dec.Decode(&s); err == io.EOF {
-				break
-			} else {
-				checkError(err)
-			}
-			stockMonth = s
-		}
-	}
-
-	return stockMonth
-}
-
-func getStockPrice(code string, date int64) StockPrice {
-	var stockPrice StockPrice
-	url := "http://money18.on.cc/js/real/hk/quote/" + code + "_r.js?t=" + strconv.FormatInt(date, 10)
-	resp, err := http.Get(url)
-	checkError(err)
-	body, _ := ioutil.ReadAll(resp.Body)
-	reg := regexp.MustCompile(".*=")
-	decodeBody := reg.ReplaceAllString(string(body), "")
-	reg1 := regexp.MustCompile(";")
-	decodeBody = reg1.ReplaceAllString(decodeBody, "")
-	reg2 := regexp.MustCompile("'")
-	decodeBody = reg2.ReplaceAllString(decodeBody, "\"")
-	dec := json.NewDecoder(strings.NewReader(decodeBody))
-	for {
-		var s StockPrice
-		if err := dec.Decode(&s); err == io.EOF {
-			break
-		} else {
-			checkError(err)
-		}
-		stockPrice = s
-	}
-	return stockPrice
-}
-
 func getStockList() []string {
 	url := "http://money18.on.cc/js/daily/hk/stocklist/stockList_secCode.js"
 	resp, err := http.Get(url)
@@ -168,7 +104,7 @@ func readStockList(stockList []string) <-chan string {
 		for _, n := range stockList {
 			out <- n
 		}
-		close(out)
+		defer close(out)
 	}()
 	return out
 }
@@ -194,19 +130,20 @@ func saveStockToDB(stock Stock) {
 }
 
 func main() {
-	fmt.Println(getStockPrice("00700", time.Now().Unix()))
 	var wg sync.WaitGroup
-	stock := readStockList(getStockList())
+
+	// Only query the first 10 HK stocks
+	stockList := readStockList(getStockList()[:10])
+
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
-			for s := range stock {
-				saveStockToDB(getStockCurrentSummary(s, time.Now().Unix()))
+			for s := range stockList {
+				fmt.Println(getStockCurrentSummary(s))
+				// saveStockToDB(getStockCurrentSummary(s))
 			}
-			wg.Done()
+			defer wg.Done()
 		}()
 	}
 	wg.Wait()
-	// fmt.Print(getStockMonthSummary("00700"))
-	//fmt.Print(getStockList())
 }
