@@ -1,8 +1,0 @@
-hash: cb5108c5606cee9eaebe9e4637618d6651d1e30d93dfb20a40dcf9abf1b4fff2
-updated: 2016-10-08T16:07:40.648117599+08:00
-imports:
-- name: github.com/axgle/mahonia
-  version: c528b747d92d41ca581a7acf3e604c396fc7c034
-- name: gopkg.in/mgo.v2
-  version: 3f83fa5005286a7fe593b055f0d7771a7dce4655
-devImports: []

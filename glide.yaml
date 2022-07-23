@@ -1,4 +1,0 @@
-package: gitlab.com/yanshaocong/stockapi
-import:
-- package: github.com/axgle/mahonia
-- package: gopkg.in/mgo.v2
